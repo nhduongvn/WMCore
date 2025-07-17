@@ -38,6 +38,7 @@ from WMCore.MicroService.Tools.Common import findParent
 from Utils.Pipeline import Pipeline, Functor
 from Utils.CertTools import ckey, cert
 
+from WMCore.Services.WorkQueue.WorkQueue import WorkQueue as WorkQueueDS
 
 class MSRuleCleanerResolveParentError(WMException):
     """
@@ -84,6 +85,7 @@ class MSRuleCleaner(MSCore):
         self.msConfig.setdefault("services", ['ruleCleaner'])
         self.msConfig.setdefault("rucioWmaAccount", "wma_test")
         self.msConfig.setdefault("rucioMStrAccount", "wmcore_transferor")
+        self.msConfig.setdefault("QueueURL", "http://localhost:5984/workqueue")
         self.msConfig.setdefault('enableRealMode', False)
         self.msConfig.setdefault('archiveDelayHours', 24 * 2)
         self.msConfig.setdefault('archiveAlarmHours', 24 * 30)
@@ -135,12 +137,19 @@ class MSRuleCleaner(MSCore):
                                                Functor(self.setArchivalDelayExpired),
                                                Functor(self.setLogDBClean),
                                                Functor(self.archive)])
-
+        
+        pName = 'plineMSTrBlockGlobalQueue'
+        self.plineMSTrBlockGlobalQueue = Pipeline(name=pName,
+                                       funcLine=[Functor(self.setPlineMarker, pName),
+                                                 Functor(self.getGlobalWorkQueueRucioRules,self.msConfig['QueueURL'],self.msConfig['rucioWmaAccount']), #use wma_test for now
+                                                 Functor(self.cleanRucioRules)])
+        
         # Building the different set of plines we will need later:
         # NOTE: The following are all the functional pipelines which are supposed to include
         #       a cleanup function and report cleanup status in the MSRuleCleanerWflow object
         self.cleanuplines = [self.plineMSTrCont,
                              self.plineMSTrBlock,
+                             self.plineMSTrBlockGlobalQueue,
                              self.plineAgentCont,
                              self.plineAgentBlock]
         # Building an auxiliary list of cleanup pipeline names only:
@@ -150,7 +159,8 @@ class MSRuleCleaner(MSCore):
         self.agentlines = [self.plineAgentCont,
                            self.plineAgentBlock]
         self.mstrlines = [self.plineMSTrCont,
-                          self.plineMSTrBlock]
+                          self.plineMSTrBlock,
+                          self.plineMSTrBlockGlobalQueue]
 
         # Initialization of the 'cleaned' and 'archived' counters:
         self.wfCounters = {'cleaned': {},
@@ -735,6 +745,102 @@ class MSRuleCleaner(MSCore):
                         msg = "Container: %s not found in Rucio for workflow: %s."
                         self.logger.info(msg, dataCont, wflow['RequestName'])
         return wflow
+    
+    #def getGlobalWorkQueueRucioRules(self):
+    #    """
+    #    Access all workflows in the GlobalWorkQueue and retrieve their corresponding Rucio rules.
+    #    :return: A dictionary mapping workflow names to their Rucio rules.
+    #    """
+    #    workflowRucioRules = {}
+    #
+    #    try:
+    #        # Fetch all workflows from the GlobalWorkQueue
+    #        self.logger.info("Fetching workflows from GlobalWorkQueue...")
+    #        globalWorkflows = self.globalQueue.status()  # Example method to fetch workflows
+    #
+    #        # Iterate over each workflow
+    #        for workflow in globalWorkflows:
+    #            workflowName = workflow['RequestName']
+    #            self.logger.info("Processing workflow: %s", workflowName)
+    #
+    #            # Create a workflow representation for MSRuleCleaner
+    #            wflow = MSRuleCleanerWflow(workflow)
+    #
+    #            # Fetch Rucio rules for the workflow
+    #            try:
+    #                wflow = self.getRucioRules(wflow, gran='container', rucioAcct=self.msConfig['rucioWmaAccount'])
+    #                wflow = self.getRucioRules(wflow, gran='block', rucioAcct=self.msConfig['rucioMStrAccount'])
+    #                workflowRucioRules[workflowName] = wflow['RulesToClean']
+    #            except Exception as ex:
+    #                self.logger.error("Failed to fetch Rucio rules for workflow: %s. Error: %s", workflowName, str(ex))
+    #                workflowRucioRules[workflowName] = None
+    #
+    #    except Exception as ex:
+    #        self.logger.error("Failed to fetch workflows from GlobalWorkQueue. Error: %s", str(ex))
+    #
+    #    return workflowRucioRules
+#
+    def getGlobalWorkQueueRucioRules(self,wflow,QueueURL,rucioAcct):
+
+        currPline = wflow['PlineMarkers'][-1]
+        workflowName = wflow['RequestName']
+        #get work queue elements using work queue API
+        #globalQueueElements = self.globalQueue.backend.getElementsForWorkflow(workflowName)    
+        
+        wqService = WorkQueueDS(QueueURL, 'workqueue_t')
+        globalQueueElements=wqService.getWQElementsByWorkflow(workflowName)
+            
+        #print("Elements in GlobalQueue:")
+        #print(json.dumps(globalQueueElements,indent=2))
+
+        # Check and process the retrieved elements
+        if globalQueueElements:
+            print(f"Found {len(globalQueueElements)} elements for workflow: {workflowName}")
+            for element in globalQueueElements:
+                
+                percentComplete = element.get('PercentComplete', 0)  # Default to 0 if key is missing
+                percentSuccess = element.get('PercentSuccess', 0)  # Default to 0 if key is missing
+                
+                if percentComplete == 100 and percentSuccess == 100:
+                    #print(f"Element {element['id']} is complete with 100% success.")
+                    
+                    #'Inputs': {'/MinimumBias/ComissioningHI-v1/RAW#372d624c-089d-11e1-8347-003048caaace':
+                    blocks = element.get('Inputs')  # Example key for dataset
+                    #blocks = element.get('Blocks')  # Example key for blocks
+                    #print("Blocks: ", blocks)
+       
+                    # Fetch rules for dataset
+                    #if dataset:
+                    #    rules = self.rucio.listDataRules(dataset, account=rucioAcct)
+                    #    elementRules.extend(rules)
+                    #    print(f"Rucio rules for dataset {dataset}: {rules}")
+                                    
+                    # Fetch rules for blocks
+                    if blocks:
+                        for block in blocks:
+                            print("Adding block ", block, " to RulesToClean")
+                            dataCont = block.split('#')[0]  # Extract the container name from the block
+                            
+                            if dataCont in self.globalLocks:
+                                msg = "Found dataset: %s in GlobalLocks. NOT considering it for filling the "
+                                msg += "RulesToClean list for both container and block level Rules for workflow: %s!"
+                                self.logger.info(msg, dataCont, wflow['RequestName'])
+                                continue
+                            try:
+                                for rule in self.rucio.listDataRules(block, account=rucioAcct):
+                                    wflow['RulesToClean'][currPline].append(rule['id'])
+                                    msg = "Found %s block-level rule to be deleted for container %s"
+                                    self.logger.info(msg, rule['id'], dataCont)
+                            except WMRucioDIDNotFoundException:
+                                msg = "Block: %s not found in Rucio for workflow: %s."
+                                self.logger.info(msg, block, wflow['RequestName'])
+                                
+                            
+        else:
+            print(f"No elements found for workflow: {workflowName}")
+#
+        return wflow
+        
 
     def cleanRucioRules(self, wflow):
         """
