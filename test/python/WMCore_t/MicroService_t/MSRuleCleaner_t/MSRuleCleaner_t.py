@@ -434,26 +434,27 @@ class MSRuleCleanerTest(EmulatedUnitTestCase):
         #print(self.taskChainReq)
         
         assert False
-    def testPipelineMSTrBlock2(self):
+    def testPipelineMSTrBlockGlobalQueue(self):
         
         #Get workflow description. ReRecoWorkloadFactory.getTestArguments() is used in createReRecoSpec below, 
         #so the workflow description here and the one used in creating workqueue is the same
         specName = "RerecoSpec"
+        #inputdataset = {"InputDataset": "/MinimumBias/ComissioningHI-v1/RAW"}
+        inputdataset = {"InputDataset": "/JetHT/Run2012C-v1/RAW"}
+        #inputdataset = {'InputDataset': '/JetHT/Run2022B-PromptReco-v1/MINIAOD'}
+        #inputdataset = {"InputDataset": "/RelValProdMinBias/Integ_Test-RECOPROD1_TC_Drop_PhEDEx_Ext_HG2105_Val_Alanv12-v11/GEN-SIM-RECO"}
         workflowDescription = ReRecoWorkloadFactory.getTestArguments()
         workflowDescription['RequestName'] = specName
+        workflowDescription['InputDataset'] = inputdataset["InputDataset"]
         print("Workflow Description:")
         print(json.dumps(workflowDescription, indent=2))
         wflow = MSRuleCleanerWflow(workflowDescription)
         print("Workflow for MSRuleCleaner:")
         print(json.dumps(wflow, indent=2))
         
-        #Create ReRecoSpec as stored in GlobalQueue
-        tmp = {"InputDataset": "/MinimumBias/ComissioningHI-v1/RAW"}
-        #tmp = {"InputDataset": "/JetHT/Run2012C-v1/RAW"}
-        #tmp = {"InputDataset": "/RelValProdMinBias/Integ_Test-RECOPROD1_TC_Drop_PhEDEx_Ext_HG2105_Val_Alanv12-v11/GEN-SIM-RECO"}
-
+        #Create ReRecoSpec as stored in GlobalQueue       
         specUrl = self.specGenerator.createReRecoSpec(specName, "file",
-                                                      assignKwargs={'SiteWhitelist':["T2_XX_SiteA"]},InputDataset=tmp["InputDataset"])
+                                                      assignKwargs={'SiteWhitelist':["T2_XX_SiteA"]},InputDataset=inputdataset["InputDataset"])
         #Make GlobalQueue
         globalQ = globalQueue(DbName='workqueue_t',
                               QueueURL=self.testInit.couchUrl,
@@ -473,7 +474,8 @@ class MSRuleCleanerTest(EmulatedUnitTestCase):
         #get the first element in the list for setup test
         #gq_element = gqList[0]
         #print("GlobalQueue Element used to setup test:")
-
+        
+        #Let try to modify the element in GlobalQueue to have PercentComplete and PercentSuccess set to 100
         wqService = WorkQueueDS(self.testInit.couchUrl, 'workqueue_t')
         #Use this instead of wqService.getWQElementsByWorkflow(workflowName) to have the element'id'
         data = wqService.db.loadView('WorkQueue', 'elementsDetailByWorkflowAndStatus',
@@ -490,10 +492,9 @@ class MSRuleCleanerTest(EmulatedUnitTestCase):
         #for e in elements:
         #    #print(e["id"], e['value']['Status'], e['value']["PercentComplete"], e['value']["PercentSuccess"])
         #    print(e["id"], e['Status'], e["PercentComplete"], e["PercentSuccess"])
-        #    print("Element: ", json.dumps(e, indent=2))
-            
+        #    print("Element: ", json.dumps(e, indent=2))   
     
-        #let update the PercentComplete and PercentSuccess
+        #let update the PercentComplete and PercentSuccess of the first elements
         element_id = [elements[0]['id']]  # Get the first element's ID
         print("Updating element:", element_id)
         wqService.updateElements(*element_id, PercentComplete=100, PercentSuccess=100)
@@ -511,46 +512,53 @@ class MSRuleCleanerTest(EmulatedUnitTestCase):
         #now let try to create Rucio rule for the block
         #create a rule and inject it in wma_test account
         blockNames = list(elements[0]['value']['Inputs'].keys())  # Get the block name from the first element
-        print("Block Name:", blockNames[0])
-        ruleAttributes = {
-            "names": blockNames[0],  # Block name
-            "rseExpression": "FAKE",  # RSE expression
-            "scope": "cms",  # Scope for CMS datasets
-            "copies": 1,  # Number of copies
-            "grouping": "DATASET",  # Grouping type (ALL, DATASET, NONE)
-            "account": "wma_test",  # Rucio account
-            "activity": "Production Input",  # Transfer activity
-            "comment": "WMCore test block rule creation",  # Optional comment
-            "ask_approval": False,  # Whether approval is required
-            "lifetime": 3600,  # Lifetime of the rule in seconds
-        }
-        
-        #rule_id = self.msRuleCleaner.rucio.createReplicationRule(
-        #    #names=blockNames[0],
-        #    names='/JetHT/Run2022A-v1/RAW#062f326a-7151-4cea-9cec-8cd1571dd4fa',
-        #    rseExpression="T2_US_Nebraska",
-        #    copies=1,
-        #    grouping="DATASET",
-        #    lifetime=3600,
-        #    account="wma_test",
-        #    ask_approval=False,
-        #    activity="Production Input",
-        #    comment="WMCore test block rule creation"
-        #)
+        #print("Block Name:", blockNames[0])
+                
+        #print("Available dataset in Rucio")
+        #datasets = self.msRuleCleaner.rucio.cli.list_dids(scope='cms', filters={'name': '/JetHT*'}, type='dataset')
+        ##datasets = self.msRuleCleaner.rucio.cli.list_dids(scope='cms', filters={'name': '/MinimumBias*'}, type='dataset')
+        ##datasets = self.msRuleCleaner.rucio.cli.list_dids(scope='cms', filters={'name': '/JetHT/*/RAW'}, type='dataset')
+        #for ds in datasets:
+        #    print(ds)
 
-        #print("Created Rucio rule with ID:", rule_id)
+        rule_id = self.msRuleCleaner.rucio.createReplicationRule(
+            names=blockNames[0],
+            rseExpression="T2_US_Nebraska",
+            copies=1,
+            grouping="DATASET",
+            lifetime=360,
+            account="wma_test",
+            ask_approval=False,
+            activity="Production Input",
+            comment="WMCore test block rule creation"
+        )
 
-        #try:
-        #    rule_info = self.msRuleCleaner.rucio.getRule(rule_id[0])
-        #    print("Rule exists:", rule_info)
-        #    #now delete it
-        #    self.msRuleCleaner.rucio.deleteRule(rule_id[0])
-        #    print("Deleted Rucio rule with ID:", rule_id)
-        #except RuleNotFound:
-        #    print("Rule not found.")
-        #except Exception as e:
-        #    print("Error checking rule:", e)
+        print("Created Rucio rule with ID:", rule_id)
+        rule_info = self.msRuleCleaner.rucio.getRule(rule_id[0])
+        print(rule_info)
+        #print(json.dumps(rule_info, indent=2))
+
+        self.msRuleCleaner.plineMSTrBlockGlobalQueue.run(wflow)
+        print("Workflow after plineMSTrBlockGlobalQueue:")
+        print(json.dumps(wflow, indent=2))
         
+        #now make sure the rule is cleaned
+        try:
+            rule_info = self.msRuleCleaner.rucio.getRule(rule_id[0])
+            #print("Rule exists:", json.dumps(rule_info, indent=2))
+            #now delete it
+            self.msRuleCleaner.rucio.deleteRule(rule_id[0])
+            print("Deleted Rucio rule with ID:", rule_id)
+        except RuleNotFound:
+            print("Rule not found.")
+        except Exception as e:
+            print("Error checking rule:", e)
+
+        print("Cleanup status: ", wflow['CleanupStatus']['plineMSTrBlockGlobalQueue'])
+        print("Rules to clean: ", wflow['RulesToClean']['plineMSTrBlockGlobalQueue'], rule_id)
+        assert((wflow['CleanupStatus']['plineMSTrBlockGlobalQueue'] is True))
+        assert((wflow['RulesToClean']['plineMSTrBlockGlobalQueue'] == rule_id))
+
 
 
         #elements = [x['id'] for x in data.get('rows', [])]
@@ -571,11 +579,6 @@ class MSRuleCleanerTest(EmulatedUnitTestCase):
         #    "ask_approval": False,  # Whether approval is required
         #    "lifetime": 3600,  # Lifetime of the rule in seconds
         #}
-
-        #Now perform the cleaning
-        self.msRuleCleaner.plineMSTrBlockGlobalQueue.run(wflow)
-        print(json.dumps(wflow, indent=2))
-#
         ##specName, returnType="spec"
         #print(json.dumps(self.taskChainReq, indent=2))
         #tmpReq = {}
@@ -661,7 +664,7 @@ class MSRuleCleanerTest(EmulatedUnitTestCase):
         #    assignKwargs={"SiteWhitelist": ["T2_XX_SiteA"]}
         #)
 
-        assert False
+        #assert False
 
     def testPipelineMSTrCont(self):
         # Test plineAgentCont

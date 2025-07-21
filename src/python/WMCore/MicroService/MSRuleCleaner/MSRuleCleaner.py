@@ -782,6 +782,15 @@ class MSRuleCleaner(MSCore):
 #
     def getGlobalWorkQueueRucioRules(self,wflow,QueueURL,rucioAcct):
 
+        """
+        Queries globle queue and builds the list of blocklevel rules of finished elements for
+        the given workflow
+        :param  wflow:   A MSRuleCleaner workflow representation
+        :param  QueueURL:    The URL of the Global Work Queue
+        :rucioAcct:    The Rucio account to use for querying rules
+        :return:         The workflow object
+        """
+
         currPline = wflow['PlineMarkers'][-1]
         workflowName = wflow['RequestName']
         #get work queue elements using work queue API
