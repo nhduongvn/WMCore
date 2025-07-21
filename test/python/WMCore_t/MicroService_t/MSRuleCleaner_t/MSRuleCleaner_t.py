@@ -316,124 +316,124 @@ class MSRuleCleanerTest(EmulatedUnitTestCase):
                          'TransferTape': False,
                          'TapeRulesStatus': [],
                          'StatusAdvanceExpiredMsg': ""}
-        assert False
+        
         self.assertDictEqual(wflow, expectedWflow)
      
-    def testPipelineMSTrBlock1(self):
-        specName = "RerecoSpec"
-        specUrl = self.specGenerator.createReRecoSpec(specName, "file",
-                                                      assignKwargs={'SiteWhitelist':["T2_XX_SiteA"]})
-        print(">>>>>>>>>",specUrl,self.testInit.couchUrl)
-        globalQ = globalQueue(DbName='workqueue_t',
-                              QueueURL=self.testInit.couchUrl,
-                              UnittestFlag=True, **self.queueParams)
-        globalQ.queueWork(specUrl, "RerecoSpec", "teamA")
-        gqList=globalQ.backend.getElementsForWorkflow(specName)
-
-        workflowSpec = globalQ.backend.getWMSpec(specName)
-        print("Workflow Specification:")
-        #print(workflowSpec.data)
-        workloadHelper = WMWorkloadHelper(workflowSpec.data)
-        #workloadHelper.load(workflowSpec.data)
-        # Extract workflow details
-        #print("Workflow Details:")
-        #print(workloadHelper.data)
-        workflowDescription = {
-            "RequestName": workloadHelper.name(),
-            "RequestType": workloadHelper.getRequestType(),
-            "InputDataset": workloadHelper.listInputDatasets(),
-            "OutputDatasets": workloadHelper.listOutputDatasets(),
-            "Tasks": workloadHelper.listAllTaskNames(),
-            "Priority": workloadHelper.priority(),
-            "Campaign": workloadHelper.getCampaign(),
-            "SiteWhitelist": workloadHelper.getSiteWhitelist(),
-            "SiteBlacklist": workloadHelper.getSiteBlacklist(),
-            "PrepID": workloadHelper.getPrepID(),
-            "AcquisitionEra": workloadHelper.getAcquisitionEra(),
-            "ProcessingString": workloadHelper.getProcessingString(),
-            "ProcessingVersion": workloadHelper.getProcessingVersion(),
-            #"RequestStatus":workflowSpec.data.request.status
-            #"TimePerEvent": workloadHelper.getTimePerEvent(),
-            #"SizePerEvent": workloadHelper.getSizePerEvent(),
-            #"EventsPerJob": workloadHelper.getEventsPerJob(),
-            #"TotalEstimatedJobs": workloadHelper.getEstimatedJobCount(),
-        }
-        #
-        print(json.dumps(workflowDescription, indent=2))
-
-        print(json.dumps(self.taskChainReq, indent=2))
-        
-        wflow = MSRuleCleanerWflow(workflowDescription)
-        print("Workflow for MSRuleCleaner:")
-        print(json.dumps(wflow, indent=2))
-
-        #specGenerator1 = StdSpecMaker()
-        #specUrl1 = specGenerator1.createTaskChainSpec(self.taskChainReq)
-        
-        # taskChainReq is your dictionary (from ReqMgr2 or test)
-        #workload = createTaskChain(taskChainReq)
-        
-        # workload is a WMWorkload instance
-        #helper = WMWorkloadHelper(workload)
-        
-        # You can inspect it, e.g.,
-        #print(helper.listAllTaskNames())
-        
-        # Write it to disk if you want to save the spec:
-        #specFilePath = "/tmp/TaskChain-%s-Spec.xml" % taskChainReq["RequestName"]
-        #helper.save(specFilePath)
-        
-        #print("Spec saved to", specFilePath)
-
-        #specClass = StdSpecs.loadSpecClass(self.taskChainReq["RequestType"])
-
-        # This returns the spec module (e.g., WMCore.WMSpec.StdSpecs.TaskChain)
-        # and you use its factory function:
-        #workload = specClass.factoryWorkloadConstruction(self.taskChainReq)
-        
-        # Wrap in a helper
-        #helper = WMWorkloadHelper(workload)
-        
-        # Optionally save to file
-        #specFile = "/tmp/%s-TaskChain-Spec.xml" % self.taskChainReq["RequestName"]
-        #helper.save(specFile)
-        
-        #print("Spec created and saved to:", specFile)
-
-        # Use the module's factory
-        #factory = TaskChainWorkloadFactory()
-        #workload = factory.factoryWorkloadConstruction('test',self.taskChainReq)
-
-        #helper = WMWorkloadHelper(workload)
-
-        #print(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
-        #print(specUrl)
-        #print(self.taskChainReq)
-        #with open(specUrl, 'r') as specFile:
-        #    specContent = specFile.read()
-        #    print("Workflow Specification Content:")
-        #    print(specContent)
-
-        #print(gqList)
-        # Test plineAgentCont
-        #wflow = MSRuleCleanerWflow(self.taskChainReq)
-        #self.msRuleCleaner.plineMSTrBlock1.run(wflow)
-        #couchServer = CouchServer(self.testInit.couchUrl)
-        #couchDb = couchServer.connectDatabase('workqueue_t')
-        #specContent = couchDb.get(specName)
-        #print(specContent)
-        # Initialize WorkQueueDS with CouchDB URL and database name
-        #wqApi = WorkQueueDS(self.testInit.couchUrl, 'workqueue_t')
-    
-        # Query the database for the workflow specification
-        #workflowSpec = wqApi.getWorkflowSpec(specName)
-        #print(workflowSpec)
-        
-        #workflowSpec = globalQ.backend.getWMSpec(specName)
-        #print(workflowSpec.data)
-        #print(self.taskChainReq)
-        
-        assert False
+    #def testPipelineMSTrBlock1(self):
+    #    specName = "RerecoSpec"
+    #    specUrl = self.specGenerator.createReRecoSpec(specName, "file",
+    #                                                  assignKwargs={'SiteWhitelist':["T2_XX_SiteA"]})
+    #    print(">>>>>>>>>",specUrl,self.testInit.couchUrl)
+    #    globalQ = globalQueue(DbName='workqueue_t',
+    #                          QueueURL=self.testInit.couchUrl,
+    #                          UnittestFlag=True, **self.queueParams)
+    #    globalQ.queueWork(specUrl, "RerecoSpec", "teamA")
+    #    gqList=globalQ.backend.getElementsForWorkflow(specName)
+#
+    #    workflowSpec = globalQ.backend.getWMSpec(specName)
+    #    print("Workflow Specification:")
+    #    #print(workflowSpec.data)
+    #    workloadHelper = WMWorkloadHelper(workflowSpec.data)
+    #    #workloadHelper.load(workflowSpec.data)
+    #    # Extract workflow details
+    #    #print("Workflow Details:")
+    #    #print(workloadHelper.data)
+    #    workflowDescription = {
+    #        "RequestName": workloadHelper.name(),
+    #        "RequestType": workloadHelper.getRequestType(),
+    #        "InputDataset": workloadHelper.listInputDatasets(),
+    #        "OutputDatasets": workloadHelper.listOutputDatasets(),
+    #        "Tasks": workloadHelper.listAllTaskNames(),
+    #        "Priority": workloadHelper.priority(),
+    #        "Campaign": workloadHelper.getCampaign(),
+    #        "SiteWhitelist": workloadHelper.getSiteWhitelist(),
+    #        "SiteBlacklist": workloadHelper.getSiteBlacklist(),
+    #        "PrepID": workloadHelper.getPrepID(),
+    #        "AcquisitionEra": workloadHelper.getAcquisitionEra(),
+    #        "ProcessingString": workloadHelper.getProcessingString(),
+    #        "ProcessingVersion": workloadHelper.getProcessingVersion(),
+    #        #"RequestStatus":workflowSpec.data.request.status
+    #        #"TimePerEvent": workloadHelper.getTimePerEvent(),
+    #        #"SizePerEvent": workloadHelper.getSizePerEvent(),
+    #        #"EventsPerJob": workloadHelper.getEventsPerJob(),
+    #        #"TotalEstimatedJobs": workloadHelper.getEstimatedJobCount(),
+    #    }
+    #    #
+    #    print(json.dumps(workflowDescription, indent=2))
+#
+    #    print(json.dumps(self.taskChainReq, indent=2))
+    #    
+    #    wflow = MSRuleCleanerWflow(workflowDescription)
+    #    print("Workflow for MSRuleCleaner:")
+    #    print(json.dumps(wflow, indent=2))
+#
+    #    #specGenerator1 = StdSpecMaker()
+    #    #specUrl1 = specGenerator1.createTaskChainSpec(self.taskChainReq)
+    #    
+    #    # taskChainReq is your dictionary (from ReqMgr2 or test)
+    #    #workload = createTaskChain(taskChainReq)
+    #    
+    #    # workload is a WMWorkload instance
+    #    #helper = WMWorkloadHelper(workload)
+    #    
+    #    # You can inspect it, e.g.,
+    #    #print(helper.listAllTaskNames())
+    #    
+    #    # Write it to disk if you want to save the spec:
+    #    #specFilePath = "/tmp/TaskChain-%s-Spec.xml" % taskChainReq["RequestName"]
+    #    #helper.save(specFilePath)
+    #    
+    #    #print("Spec saved to", specFilePath)
+#
+    #    #specClass = StdSpecs.loadSpecClass(self.taskChainReq["RequestType"])
+#
+    #    # This returns the spec module (e.g., WMCore.WMSpec.StdSpecs.TaskChain)
+    #    # and you use its factory function:
+    #    #workload = specClass.factoryWorkloadConstruction(self.taskChainReq)
+    #    
+    #    # Wrap in a helper
+    #    #helper = WMWorkloadHelper(workload)
+    #    
+    #    # Optionally save to file
+    #    #specFile = "/tmp/%s-TaskChain-Spec.xml" % self.taskChainReq["RequestName"]
+    #    #helper.save(specFile)
+    #    
+    #    #print("Spec created and saved to:", specFile)
+#
+    #    # Use the module's factory
+    #    #factory = TaskChainWorkloadFactory()
+    #    #workload = factory.factoryWorkloadConstruction('test',self.taskChainReq)
+#
+    #    #helper = WMWorkloadHelper(workload)
+#
+    #    #print(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
+    #    #print(specUrl)
+    #    #print(self.taskChainReq)
+    #    #with open(specUrl, 'r') as specFile:
+    #    #    specContent = specFile.read()
+    #    #    print("Workflow Specification Content:")
+    #    #    print(specContent)
+#
+    #    #print(gqList)
+    #    # Test plineAgentCont
+    #    #wflow = MSRuleCleanerWflow(self.taskChainReq)
+    #    #self.msRuleCleaner.plineMSTrBlock1.run(wflow)
+    #    #couchServer = CouchServer(self.testInit.couchUrl)
+    #    #couchDb = couchServer.connectDatabase('workqueue_t')
+    #    #specContent = couchDb.get(specName)
+    #    #print(specContent)
+    #    # Initialize WorkQueueDS with CouchDB URL and database name
+    #    #wqApi = WorkQueueDS(self.testInit.couchUrl, 'workqueue_t')
+    #
+    #    # Query the database for the workflow specification
+    #    #workflowSpec = wqApi.getWorkflowSpec(specName)
+    #    #print(workflowSpec)
+    #    
+    #    #workflowSpec = globalQ.backend.getWMSpec(specName)
+    #    #print(workflowSpec.data)
+    #    #print(self.taskChainReq)
+    #    
+    #    assert False
     def testPipelineMSTrBlockGlobalQueue(self):
         
         #Get workflow description. ReRecoWorkloadFactory.getTestArguments() is used in createReRecoSpec below, 
