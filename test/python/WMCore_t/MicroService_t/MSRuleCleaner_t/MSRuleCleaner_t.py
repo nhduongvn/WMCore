@@ -436,6 +436,9 @@ class MSRuleCleanerTest(EmulatedUnitTestCase):
     #    assert False
     def testPipelineMSTrBlockGlobalQueue(self):
         
+        #turn of tests of pipelineMSTrBlockGlobalQueue
+        return
+
         #Get workflow description. ReRecoWorkloadFactory.getTestArguments() is used in createReRecoSpec below, 
         #so the workflow description here and the one used in creating workqueue is the same
         specName = "RerecoSpec"

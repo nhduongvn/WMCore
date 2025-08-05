@@ -149,7 +149,7 @@ class MSRuleCleaner(MSCore):
         #       a cleanup function and report cleanup status in the MSRuleCleanerWflow object
         self.cleanuplines = [self.plineMSTrCont,
                              self.plineMSTrBlock,
-                             self.plineMSTrBlockGlobalQueue,
+                             #self.plineMSTrBlockGlobalQueue,
                              self.plineAgentCont,
                              self.plineAgentBlock]
         # Building an auxiliary list of cleanup pipeline names only:
@@ -159,8 +159,8 @@ class MSRuleCleaner(MSCore):
         self.agentlines = [self.plineAgentCont,
                            self.plineAgentBlock]
         self.mstrlines = [self.plineMSTrCont,
-                          self.plineMSTrBlock,
-                          self.plineMSTrBlockGlobalQueue]
+                          self.plineMSTrBlock]
+                          #self.plineMSTrBlockGlobalQueue]
 
         # Initialization of the 'cleaned' and 'archived' counters:
         self.wfCounters = {'cleaned': {},
