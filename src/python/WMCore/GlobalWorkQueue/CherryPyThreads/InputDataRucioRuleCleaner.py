@@ -15,7 +15,7 @@ class InputDataRucioRuleCleaner(CherryPyPeriodicTask):
 
         super(InputDataRucioRuleCleaner, self).__init__(config)
         self.globalQ = globalQueue(logger=self.logger, **config.queueParams)
-        self.msRuleCleaner = MSRuleCleaner(config)  # Initialize MSRuleCleaner
+        self.msRuleCleaner = MSRuleCleaner(config, logger=self.logger)  # Initialize MSRuleCleaner
 
     def setConcurrentTasks(self, config):
         """
@@ -23,10 +23,10 @@ class InputDataRucioRuleCleaner(CherryPyPeriodicTask):
         """
         self.concurrentTasks = [{'func': self.cleanRucioRules, 'duration': config.cleanInputDataRucioRuleDuration}]
 
-    def cleanRucioRules(self, rucioAcct):
+    def cleanRucioRules(self, config):
         """
         Queries global queue and builds the list of blocklevel Rucio rules of finished elements to be deleted. Calls MSRuleCleaner cleanRucioRules(self, wflow) to delete the rules.
-        :rucioAcct:    The Rucio account to use for querying rules
+        :config:       The configuration for the task. This uses Rucio account from config to use for querying rules
         :return:       The result of MSRuleCleaner cleanRucioRules(self, wflow) method, which is True if all rules were deleted successfully, False otherwise.
         """
         
@@ -76,8 +76,8 @@ class InputDataRucioRuleCleaner(CherryPyPeriodicTask):
                                 self.logger.info(msg, dataCont, requestName)
                                 continue
                             try:
-                                print('Fetching rules for block:', block, rucioAcct, self.msRuleCleaner.rucio.listDataRules(block, account=rucioAcct))
-                                for rule in self.msRuleCleaner.rucio.listDataRules(block, account=rucioAcct):
+                                print('Fetching rules for block:', block, "\n", config.rucioAccount, "\n", self.msRuleCleaner.rucio.listDataRules(block, account=config.rucioAccount))
+                                for rule in self.msRuleCleaner.rucio.listDataRules(block, account=config.rucioAccount):
                                     msg = "Found %s block-level rule to be deleted for container %s"
                                     self.logger.info(msg, rule['id'], dataCont)
                                     #cleanRules of MSRuleCleaner expects a list of rule ids and always clean the last one in the list of PlineMarkers
