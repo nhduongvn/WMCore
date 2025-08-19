@@ -36,13 +36,14 @@ class InputDataRucioRuleCleaner(CherryPyPeriodicTask):
         #globalQueueElements=self.globalQ.getWork({'Status':'Done'},siteJobCounts={})
         globalQueueElements=self.globalQ.backend.getElements()
             
-        print("Elements in GlobalQueue cleanRucioRules:")
-        print(json.dumps(globalQueueElements,indent=2))
+        #print("Elements in GlobalQueue cleanRucioRules:")
+        #print(json.dumps(globalQueueElements,indent=2))
 
-        rulesToClean = {'PlineMarkers':['Current'], 'RulesToClean': {'Current': []}, 'CleanupStatus': {'Current': []}} #to be able to use cleanRules method of MSRuleCleaner
+        #to be able to use cleanRules method of MSRuleCleaner
+        rulesToClean = {'PlineMarkers':['Current'], 'RulesToClean': {'Current': []}, 'CleanupStatus': {'Current': []}} 
 
         if globalQueueElements:
-            print(f"Found {len(globalQueueElements)} elements in GlobalQueue")
+            #print(f"Found {len(globalQueueElements)} elements in GlobalQueue")
             for element in globalQueueElements:
                 
                 requestName = element.get('RequestName')  # Extract the RequestName field
@@ -51,19 +52,10 @@ class InputDataRucioRuleCleaner(CherryPyPeriodicTask):
 
                 
                 if percentComplete == 100 and percentSuccess == 100:
-                    #print(f"Element {element['id']} is complete with 100% success.")
-                    
+                                        
                     #'Inputs': {'/MinimumBias/ComissioningHI-v1/RAW#372d624c-089d-11e1-8347-003048caaace':
                     blocks = element.get('Inputs')  # Example key for dataset
-                    #blocks = element.get('Blocks')  # Example key for blocks
-                    #print("Blocks: ", blocks)
-       
-                    # Fetch rules for dataset
-                    #if dataset:
-                    #    rules = self.rucio.listDataRules(dataset, account=rucioAcct)
-                    #    elementRules.extend(rules)
-                    #    print(f"Rucio rules for dataset {dataset}: {rules}")
-                                    
+                                                       
                     # Fetch rules for blocks
                     if blocks:
                         for block in blocks:
@@ -92,8 +84,6 @@ class InputDataRucioRuleCleaner(CherryPyPeriodicTask):
 
         else:
             print(f"No elements with status DONE found in GlobalQueue")
-#
-        
-        
+
         self.logger.info("%s executed in %.3f secs.", self.__class__.__name__, time() - tStart)
         return

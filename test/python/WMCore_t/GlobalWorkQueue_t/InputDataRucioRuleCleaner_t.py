@@ -21,7 +21,7 @@ import os
 import time
 
 import unittest
-from unittest.mock import MagicMock
+
 
 class DummyREST:
     def __init__(self):
@@ -42,7 +42,6 @@ class InputDataRucioRuleCleanerTest(EmulatedUnitTestCase):
         self.msConfig = {"verbose": True,
                          "interval": 1 * 60,
                          "services": ['ruleCleaner'],
-                         #"rucioWmaAcct": 'wma_test', #wma_transfer for transferor
                          "rucioAccount": 'wma_test',
                          'reqmgr2Url': 'https://cmsweb-testbed.cern.ch/reqmgr2',
                          'msOutputUrl': 'https://cmsweb-testbed.cern.ch/ms-output',
@@ -58,9 +57,6 @@ class InputDataRucioRuleCleanerTest(EmulatedUnitTestCase):
                          'archiveAlarmHours': 24,
                          'enableRealMode': True}
         
-        #The Rucio account used for InputDataRucioRuleCleaner is the same as the one used for WMAgent                 
-        #self.msConfig['rucioAccount'] = self.msConfig['rucioWmaAcct']
-
         self.creds = {"client_cert": os.getenv("X509_USER_CERT", "Unknown"),
                       "client_key": os.getenv("X509_USER_KEY", "Unknown")}
         self.rucioConfigDict = {"rucio_host": self.msConfig['rucioUrl'],
@@ -100,30 +96,16 @@ class InputDataRucioRuleCleanerTest(EmulatedUnitTestCase):
                 
         print("X509_USER_CERT:", os.getenv("X509_USER_CERT"))
         print("X509_USER_KEY:", os.getenv("X509_USER_KEY"))
-
-        # Mock the REST and config objects
-        self.mockRest = MagicMock()
-        #self.mockConfig = MagicMock() #can not be used as it does not support plain dictionary access used in MSRuleCleaner
-        #self.mockConfig._internal_name = "GlobalWorkQueueTest"
-        #self.mockConfig.log_file = "test.log"
-        #self.mockConfig.reqmgr2Url = self.msConfig['reqmgr2Url']
-        #self.mockConfig.queueParams = self.queueParams
-        #self.mockConfig.cleanInputDataRucioRuleDuration = 60  # Example duration in seconds
-        #
-        #self.mockConfig.__getitem__.side_effect = lambda key: {
-        #  'reqmgr2Url': 'https://cmsweb.cern.ch/reqmgr2',
-        #  "logDBUrl": "https://cmsweb-testbed.cern.ch/couchdb/wmstats_logdb"
-        #}.get(key, MagicMock())  # Provide fallback if other keys accessed
-        
-        # Create object with attributes
+      
+        # Create config object with attributes
         self.config_obj = DictWithAttrs(self.msConfig)
         #additional attributes needed by cherrypy periodic task
         self.config_obj._internal_name = "GlobalWorkQueueTest"
         self.config_obj.log_file = "test.log"
         #additional attributes needed by global workqueue
         self.config_obj.queueParams = self.queueParams
-        #duration for the periodic task
-        self.config_obj.cleanInputDataRucioRuleDuration = 10  # Example duration in seconds
+        #duration for the periodic task in seconds
+        self.config_obj.cleanInputDataRucioRuleDuration = 10
 
         super(InputDataRucioRuleCleanerTest, self).setUp()
     
@@ -210,18 +192,6 @@ class InputDataRucioRuleCleanerTest(EmulatedUnitTestCase):
             #print(e["id"], e['Status'], e["PercentComplete"], e["PercentSuccess"])
               
         
-        #print("Available dataset in Rucio")
-        #datasets = self.msRuleCleaner.rucio.cli.list_dids(scope='cms', filters={'name': '/JetHT*'}, type='dataset')
-        ##datasets = self.msRuleCleaner.rucio.cli.list_dids(scope='cms', filters={'name': '/MinimumBias*'}, type='dataset')
-        ##datasets = self.msRuleCleaner.rucio.cli.list_dids(scope='cms', filters={'name': '/JetHT/*/RAW'}, type='dataset')
-        #for ds in datasets:
-        #    print(ds)
-
-        # Mock the Rucio listDataRules method
-        #cleaner.rucio.listDataRules = lambda dataset, account: [{'id': 'rule1', 'state': 'OK'}]
-
-        # Call the cleanRucioRules method
-        #results = cleaner.cleanRucioRules(self.msConfig['rucioWmaAcct'])
         results = cleaner.cleanRucioRules(self.config_obj)
         print("Results from cleanRucioRules:", json.dumps(results, indent=2))
         #now make sure the rule is cleaned
@@ -241,23 +211,9 @@ class InputDataRucioRuleCleanerTest(EmulatedUnitTestCase):
         
         if not delResult and timeleft >= 300:
             print("Failed to delete the rule after 5 minutes, exiting...")
-        
-        #try:
-        #    rule_info = cleaner.msRuleCleaner.rucio.getRule(rule_id[0])
-        #    #print("Rule exists:", json.dumps(rule_info, indent=2))
-        #    #now delete it
-        #    print('List of rucio rules: ', blockNames[0], cleaner.msRuleCleaner.rucio.listDataRules(blockNames[0], account=self.msConfig['rucioAccount']))
-        #    delResult = cleaner.msRuleCleaner.rucio.deleteRule(rule_id[0])
-        #    print("Deleted Rucio rule with ID:", rule_id, delResult)
-        #except RuleNotFound:
-        #    print("Rule not found.")
-        #except Exception as e:
-        #    print("Error checking rule:", e)
-
-
-        # Check that the method executed without errors
+       
         self.assertTrue(results['CleanupStatus']['Current'])
-        # You can add assertions here to verify the expected behavior)
+       
 
     def testInputDataRucioRuleCleanerWithThreading(self):
         """
@@ -295,7 +251,8 @@ class InputDataRucioRuleCleanerTest(EmulatedUnitTestCase):
         # Start CherryPy engine
         print('CherryPy engine starting...')
         cherrypy.engine.start()
-        time.sleep(5)  # Give CherryPy a moment to start and modify the element in GlobalQueue after 5 seconds and before the next run of the periodic task
+        # Give CherryPy a moment to start and modify the element in GlobalQueue after 5 seconds and before the next run of the periodic task
+        time.sleep(5)
         
         #Let try to modify the element in GlobalQueue to have PercentComplete and PercentSuccess set to 100
         wqService = WorkQueueDS(self.testInit.couchUrl, 'workqueue_t')
@@ -315,8 +272,7 @@ class InputDataRucioRuleCleanerTest(EmulatedUnitTestCase):
         
         #create a rule and inject it in wma_test account
         blockNames = list(elements[0]['value']['Inputs'].keys())  # Get the block name from the first element
-        print("Block Name:", blockNames[0])
-        
+                
         #need to create rule here otherwise we do not know which element was updated since the element order changes each time re-fetching (of course we can use the element_id)
         rule_id = cleaner.msRuleCleaner.rucio.createReplicationRule(
             names=blockNames[0],
@@ -338,34 +294,14 @@ class InputDataRucioRuleCleanerTest(EmulatedUnitTestCase):
         data = wqService.db.loadView('WorkQueue', 'elementsDetailByWorkflowAndStatus',
                                  {'startkey': [specName], 'endkey': [specName, {}],
                                   'reduce': False})
-        #element order changes each time, so we need to re-fetch the elements
+
         elements = data.get('rows', [])
-        #elements=wqService.getWQElementsByWorkflow(specName)
         print("Updated Elements in GlobalQueue:")
         for e in elements:
             print(e["id"], e['value']['Status'], e['value']["PercentComplete"], e['value']["PercentSuccess"])
-            #print(e["id"], e['Status'], e["PercentComplete"], e["PercentSuccess"])
-
-        #total waiting time ~25 (5+20) seconds to let the periodic task run 3 times (0, 10, 20) total. 
-        #The second time it runs it should find the updated element and clean the rule.
-        #Nothing happens in the third run.      
+    
         time.sleep(20)
         
-        #print("Available dataset in Rucio")
-        #datasets = self.msRuleCleaner.rucio.cli.list_dids(scope='cms', filters={'name': '/JetHT*'}, type='dataset')
-        ##datasets = self.msRuleCleaner.rucio.cli.list_dids(scope='cms', filters={'name': '/MinimumBias*'}, type='dataset')
-        ##datasets = self.msRuleCleaner.rucio.cli.list_dids(scope='cms', filters={'name': '/JetHT/*/RAW'}, type='dataset')
-        #for ds in datasets:
-        #    print(ds)
-
-        # Mock the Rucio listDataRules method
-        #cleaner.rucio.listDataRules = lambda dataset, account: [{'id': 'rule1', 'state': 'OK'}]
-
-        # Call the cleanRucioRules method
-        #results = cleaner.cleanRucioRules(self.msConfig['rucioAccount'])
-        #print("Results from cleanRucioRules:", json.dumps(results, indent=2))
-        
-        #cherrypy.engine.block()
         print('CherryPy engine exiting...')
         cherrypy.engine.exit()
 
@@ -403,17 +339,6 @@ class InputDataRucioRuleCleanerTest(EmulatedUnitTestCase):
             print("Failed to delete the rule after 5 minutes, exiting...")
         
         self.assertTrue(not rule_info_for_check, "Rule not deleted successfully after periodic task execution.")
-
-        #while rule_info:
-        #    print("Rule still exists:", rule_info)
-        #    rule_info = cleaner.msRuleCleaner.rucio.getRule(rule_id[0])
-        #    time.sleep(60)  # Wait for a while before checking again
-
-        # Check that the method executed without errors
-        #self.assertTrue(results['CleanupStatus']['Current'])
-        # You can add assertions here to verify the expected behavior)
-        
-        #self.assertTrue(True, "Periodic task started successfully, check the logs for details")
         
 if __name__ == '__main__':
     unittest.main()
