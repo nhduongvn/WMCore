@@ -156,11 +156,11 @@ def injectStepChainConfigMC(couchDatabase):
     couchDatabase.queue(harvestConfig)
     result = couchDatabase.commit()
 
-    docMap = {"Step1": result[0][u'id'],
-              "Step2": result[1][u'id'],
-              "Step3": result[2][u'id'],
-              "Step4": result[3][u'id'],
-              "Harvest": result[4][u'id']}
+    docMap = {"Step1": result[0]['id'],
+              "Step2": result[1]['id'],
+              "Step3": result[2]['id'],
+              "Step4": result[3]['id'],
+              "Harvest": result[4]['id']}
 
     return docMap
 
@@ -291,7 +291,7 @@ class StepChainTests(EmulatedUnitTestCase):
 
         # workqueue start policy check
         self.assertEqual(testWorkload.startPolicy(), "MonteCarlo")
-        workqueueSplit = {'SliceSize': 200, 'SliceType': 'NumberOfEvents', 'SplittingAlgo': 'EventBased',
+        workqueueSplit = {'SliceSize': 300, 'SliceType': 'NumberOfEvents', 'SplittingAlgo': 'EventBased',
                           'SubSliceSize': 100, 'SubSliceType': 'NumberOfEventsPerLumi',
                           'policyName': 'MonteCarlo', 'OpenRunningTimeout': 0}
         self.assertDictEqual(testWorkload.startPolicyParameters(), workqueueSplit)
@@ -305,7 +305,7 @@ class StepChainTests(EmulatedUnitTestCase):
         step1Splitting = splitArgs['/TestWorkload/GENSIM']
         self.assertEqual(step1Splitting['type'], 'Production')
         self.assertEqual(step1Splitting['algorithm'], 'EventBased')
-        self.assertEqual(step1Splitting['events_per_job'], 200)
+        self.assertEqual(step1Splitting['events_per_job'], 300)
         self.assertEqual(step1Splitting['events_per_lumi'], 100)
         self.assertFalse(step1Splitting['lheInputFiles'])
         self.assertFalse(step1Splitting['trustSitelists'])
@@ -389,7 +389,7 @@ class StepChainTests(EmulatedUnitTestCase):
 
         # workqueue start policy check
         self.assertEqual(testWorkload.startPolicy(), "MonteCarlo")
-        workqueueSplit = {'SliceSize': 200, 'SliceType': 'NumberOfEvents', 'SplittingAlgo': 'EventBased',
+        workqueueSplit = {'SliceSize': 300, 'SliceType': 'NumberOfEvents', 'SplittingAlgo': 'EventBased',
                           'SubSliceSize': 100, 'SubSliceType': 'NumberOfEventsPerLumi',
                           'policyName': 'MonteCarlo', 'OpenRunningTimeout': 0}
         self.assertDictEqual(testWorkload.startPolicyParameters(), workqueueSplit)
@@ -408,7 +408,7 @@ class StepChainTests(EmulatedUnitTestCase):
 
         splitParams = task.jobSplittingParameters()
         self.assertEqual(splitParams['algorithm'], "EventBased", "Wrong job splitting algo")
-        self.assertEqual(splitParams['events_per_job'], 200)
+        self.assertEqual(splitParams['events_per_job'], 300)
         self.assertEqual(splitParams['events_per_lumi'], 100)
         self.assertFalse(splitParams['lheInputFiles'], "Wrong LHE flag")
         self.assertFalse(splitParams['deterministicPileup'])
@@ -688,7 +688,7 @@ class StepChainTests(EmulatedUnitTestCase):
 
         splitParams = task.jobSplittingParameters()
         self.assertEqual(splitParams['algorithm'], "EventAwareLumiBased", "Wrong job splitting algo")
-        self.assertEqual(splitParams['events_per_job'], 200)
+        self.assertEqual(splitParams['events_per_job'], 300)
         self.assertTrue(splitParams['performance']['timePerEvent'] >= 144)
         self.assertTrue(splitParams['performance']['sizePerEvent'] >= 512)
         self.assertTrue(splitParams['performance']['memoryRequirement'] == 3500)
@@ -2436,9 +2436,10 @@ class StepChainTests(EmulatedUnitTestCase):
         testWorkload = factory.factoryWorkloadConstruction("TestWorkload", testArguments)
         self.assertIsNone(testArguments['RequiresGPU'])
         self.assertEqual(testArguments['GPUParams'], json.dumps(None))
+        self.assertEqual(testArguments['JobExtraMatchRequirements'], "")
         for stepKey in ['Step1', 'Step2', 'Step3']:
-            self.assertTrue("RequiresGPU" not in testArguments[stepKey])
-            self.assertTrue("GPUParams" not in testArguments[stepKey])
+            for paramKey in ("RequiresGPU", "GPUParams", "JobExtraMatchRequirements"):
+                self.assertTrue(paramKey not in testArguments[stepKey])
 
         for taskName in testWorkload.listAllTaskNames():
             taskObj = testWorkload.getTaskByName(taskName)
@@ -2457,9 +2458,10 @@ class StepChainTests(EmulatedUnitTestCase):
 
         self.assertIsNone(testArguments['RequiresGPU'])
         self.assertEqual(testArguments['GPUParams'], json.dumps(None))
+        self.assertEqual(testArguments['JobExtraMatchRequirements'], "")
         for stepKey in ['Step1', 'Step2', 'Step3']:
-            self.assertTrue("RequiresGPU" not in testArguments[stepKey])
-            self.assertTrue("GPUParams" not in testArguments[stepKey])
+            for paramKey in ("RequiresGPU", "GPUParams", "JobExtraMatchRequirements"):
+                self.assertTrue(paramKey not in testArguments[stepKey])
 
         for taskName in testWorkload.listAllTaskNames():
             taskObj = testWorkload.getTaskByName(taskName)
@@ -2470,6 +2472,15 @@ class StepChainTests(EmulatedUnitTestCase):
                     self.assertIsNone(stepHelper.data.application.gpu.gpuRequirements)
                 else:
                     self.assertFalse(hasattr(stepHelper.data.application, "gpu"))
+
+
+        # now test a failing case for the extra GPU parameters
+        for wrongValues in (None, {"test"}, 123, 123.4, ["wrong"], 20000 * "a"):
+            testArguments['JobExtraMatchRequirements'] = wrongValues
+            with self.assertRaises(WMSpecFactoryException):
+                factory.factoryWorkloadConstruction("PullingTheChain", testArguments)
+        # roll it back to a valid value
+        testArguments['JobExtraMatchRequirements'] = ""
 
         # last but not least, test a failing case
         testArguments['RequiresGPU'] = "required"

@@ -2,6 +2,7 @@ from __future__ import (print_function, division)
 
 import unittest
 import os
+import tempfile
 
 from mock import mock
 from WMCore.Storage.Backends.XRDCPImpl import XRDCPImpl
@@ -88,7 +89,7 @@ class XRDCPImplTest(unittest.TestCase):
             if copyCommandOptions:
                 targetPFN += "?svcClass=t0cms"
         initFile = "/cvmfs/oasis.opensciencegrid.org/osg-software/osg-wn-client/current/el7-x86_64/setup.sh"
-        if not self.XRDCPImpl._checkXRDUtilsExist() and os.path.isfile(initFile):
+        if not self.XRDCPImpl.checkXRDUtilsExist() and os.path.isfile(initFile):
             copyCommand += "source {}\n".format(initFile)
         copyCommand += "xrdcp --force --nopbar "
         if unknow:
@@ -125,4 +126,13 @@ class XRDCPImplTest(unittest.TestCase):
     @mock.patch('WMCore.Storage.Backends.XRDCPImpl.XRDCPImpl.executeCommand')
     def testRemoveFile(self, mock_executeCommand):
         self.XRDCPImpl.removeFile("gsiftp://site.com/inputs/f.a")
-        mock_executeCommand.assert_called_with("xrdfs site.com rm inputs/f.a")
+        mock_executeCommand.assert_called_with("env X509_USER_PROXY=$X509_USER_PROXY  xrdfs site.com rm inputs/f.a")
+
+        # now set the expected environment variable and run the same command (which will allow token to be used)
+        with tempfile.NamedTemporaryFile(delete=True) as temp_file:
+            temp_file_path = temp_file.name
+            os.environ["BEARER_TOKEN_FILE"] = temp_file_path
+            self.XRDCPImpl.removeFile("gsiftp://site.com/inputs/f.a")
+            mock_executeCommand.assert_called_with("env BEARER_TOKEN_FILE=$BEARER_TOKEN_FILE BEARER_TOKEN=$(cat ${BEARER_TOKEN_FILE:-/dev/null})  xrdfs site.com rm inputs/f.a")
+            del os.environ["BEARER_TOKEN_FILE"]
+

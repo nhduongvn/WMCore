@@ -252,11 +252,11 @@ def makeRealConfigs(couchDatabase):
     result = couchDatabase.commit()
 
     docMap = {
-        "Scratch": result[0][u'id'],
-        "Digi": result[1][u'id'],
-        "Aod": result[2][u'id'],
-        "MiniAod": result[3][u'id'],
-        "Harvest": result[4][u'id'],
+        "Scratch": result[0]['id'],
+        "Digi": result[1]['id'],
+        "Aod": result[2]['id'],
+        "MiniAod": result[3]['id'],
+        "Harvest": result[4]['id'],
     }
     return docMap
 
@@ -328,10 +328,10 @@ def makeProcessingConfigs(couchDatabase):
     result = couchDatabase.commit()
 
     docMap = {
-        "DigiHLT": result[0][u'id'],
-        "Reco": result[1][u'id'],
-        "ALCAReco": result[2][u'id'],
-        "Skims": result[3][u'id'],
+        "DigiHLT": result[0]['id'],
+        "Reco": result[1]['id'],
+        "ALCAReco": result[2]['id'],
+        "Skims": result[3]['id'],
     }
     return docMap
 
@@ -447,7 +447,7 @@ class TaskChainTests(EmulatedUnitTestCase):
         self.configDatabase = couchServer.connectDatabase("taskchain_t")
         self.testInit.generateWorkDir()
 
-        self.differentNCores = getTestFile('data/ReqMgr/requests/Integration/TaskChain_Prod.json')
+        self.differentNCores = getTestFile('data/ReqMgr/requests/Static/TaskChain_Prod.json')
 
         myThread = threading.currentThread()
         self.daoFactory = DAOFactory(package="WMCore.WMBS",
@@ -1195,7 +1195,7 @@ class TaskChainTests(EmulatedUnitTestCase):
 
         # workqueue start policy checks
         self.assertEqual(testWorkload.startPolicy(), "MonteCarlo")
-        workqueueSplit = {'SliceSize': 300, 'SliceType': 'NumberOfEvents', 'SplittingAlgo': 'EventBased',
+        workqueueSplit = {'SliceSize': 400, 'SliceType': 'NumberOfEvents', 'SplittingAlgo': 'EventBased',
                           'SubSliceSize': 100, 'SubSliceType': 'NumberOfEventsPerLumi', 'blowupFactor': 3.4,
                           'policyName': 'MonteCarlo', 'OpenRunningTimeout': 0}
         self.assertDictEqual(testWorkload.startPolicyParameters(), workqueueSplit)
@@ -1205,7 +1205,7 @@ class TaskChainTests(EmulatedUnitTestCase):
         task1Splitting = splitArgs['/ComplexChain/myTask1']
         self.assertEqual(task1Splitting['type'], 'Production')
         self.assertEqual(task1Splitting['algorithm'], 'EventBased')
-        self.assertEqual(task1Splitting['events_per_job'], 300)
+        self.assertEqual(task1Splitting['events_per_job'], 400)
         self.assertEqual(task1Splitting['events_per_lumi'], 100)
         self.assertFalse(task1Splitting['deterministicPileup'])
         self.assertFalse(task1Splitting['lheInputFiles'])
@@ -1217,7 +1217,7 @@ class TaskChainTests(EmulatedUnitTestCase):
         task2Splitting = splitArgs['/ComplexChain/myTask1/myTask1MergeRAWSIMoutput/myTask2']
         self.assertEqual(task2Splitting['type'], 'Processing')
         self.assertEqual(task2Splitting['algorithm'], 'EventAwareLumiBased')
-        self.assertEqual(task2Splitting['events_per_job'], 320)
+        self.assertEqual(task2Splitting['events_per_job'], 480)
         self.assertFalse(task2Splitting['deterministicPileup'])
         self.assertFalse(task2Splitting['lheInputFiles'])
         self.assertFalse(task2Splitting['trustSitelists'])
@@ -1229,7 +1229,7 @@ class TaskChainTests(EmulatedUnitTestCase):
             '/ComplexChain/myTask1/myTask1MergeRAWSIMoutput/myTask2/myTask2MergePREMIXRAWoutput/myTask3']
         self.assertEqual(task3Splitting['type'], 'Processing')
         self.assertEqual(task3Splitting['algorithm'], 'EventAwareLumiBased')
-        self.assertEqual(task3Splitting['events_per_job'], 360)
+        self.assertEqual(task3Splitting['events_per_job'], 540)
         self.assertFalse(task3Splitting['deterministicPileup'])
         self.assertFalse(task3Splitting['lheInputFiles'])
         self.assertFalse(task3Splitting['trustSitelists'])
@@ -1241,7 +1241,7 @@ class TaskChainTests(EmulatedUnitTestCase):
             '/ComplexChain/myTask1/myTask1MergeRAWSIMoutput/myTask2/myTask2MergePREMIXRAWoutput/myTask3/myTask3MergeAODSIMoutput/myTask4']
         self.assertEqual(task4Splitting['type'], 'Processing')
         self.assertEqual(task4Splitting['algorithm'], 'EventAwareLumiBased')
-        self.assertEqual(task4Splitting['events_per_job'], 411)
+        self.assertEqual(task4Splitting['events_per_job'], 617)
         self.assertFalse(task4Splitting['deterministicPileup'])
         self.assertFalse(task4Splitting['lheInputFiles'])
         self.assertFalse(task4Splitting['trustSitelists'])
@@ -2346,10 +2346,11 @@ class TaskChainTests(EmulatedUnitTestCase):
         factory = TaskChainWorkloadFactory()
         testWorkload = factory.factoryWorkloadConstruction("PullingTheChain", arguments)
         self.assertIsNone(arguments['RequiresGPU'])
+        self.assertEqual(arguments['JobExtraMatchRequirements'], "")
         self.assertEqual(arguments['GPUParams'], json.dumps(None))
         for taskKey in ("Task1", "Task2"):
-            self.assertTrue("RequiresGPU" not in arguments[taskKey])
-            self.assertTrue("GPUParams" not in arguments[taskKey])
+            for paramKey in ("RequiresGPU", "GPUParams", "JobExtraMatchRequirements"):
+                self.assertTrue(paramKey not in arguments[taskKey])
 
         for taskName in testWorkload.listAllTaskNames():
             taskObj = testWorkload.getTaskByName(taskName)
@@ -2371,8 +2372,8 @@ class TaskChainTests(EmulatedUnitTestCase):
         self.assertIsNone(arguments['RequiresGPU'])
         self.assertEqual(arguments['GPUParams'], json.dumps(None))
         for taskKey in ("Task1", "Task2"):
-            self.assertTrue("RequiresGPU" not in arguments[taskKey])
-            self.assertTrue("GPUParams" not in arguments[taskKey])
+            for paramKey in ("RequiresGPU", "GPUParams", "JobExtraMatchRequirements"):
+                self.assertTrue(paramKey not in arguments[taskKey])
 
         for taskName in testWorkload.listAllTaskNames():
             taskObj = testWorkload.getTaskByName(taskName)
@@ -2384,7 +2385,15 @@ class TaskChainTests(EmulatedUnitTestCase):
                 else:
                     self.assertFalse(hasattr(stepHelper.data.application, "gpu"))
 
-        # last but not least, test a failing case
+        # now test a failing case for the extra GPU parameters
+        for wrongValues in (None, {"test"}, 123, 123.4, ["wrong"], 20000 * "a"):
+            arguments['JobExtraMatchRequirements'] = wrongValues
+            with self.assertRaises(WMSpecFactoryException):
+                factory.factoryWorkloadConstruction("PullingTheChain", arguments)
+        # roll it back to a valid value
+        arguments['JobExtraMatchRequirements'] = ""
+
+        # last but not least, test a failing case (if GPU is required, there must be a GPUParams)
         arguments['RequiresGPU'] = "required"
         arguments['GPUParams'] = json.dumps(None)
         with self.assertRaises(WMSpecFactoryException):
@@ -2402,7 +2411,8 @@ class TaskChainTests(EmulatedUnitTestCase):
         arguments['Task1']['ConfigCacheID'] = processorDocs['DigiHLT']
         arguments['Task2']['ConfigCacheID'] = processorDocs['Reco']
         gpuParams = {"GPUMemoryMB": 1234, "CUDARuntime": "11.2.3", "CUDACapabilities": ["7.5", "8.0"]}
-        arguments['Task1'].update({"RequiresGPU": "optional", "GPUParams": json.dumps(gpuParams)})
+        extraReqs = 'regexp("^NVIDIA L40S$", GPUs_DeviceName)'
+        arguments['Task1'].update({"RequiresGPU": "optional", "GPUParams": json.dumps(gpuParams), "JobExtraMatchRequirements": extraReqs})
         arguments['Task2'].update({"RequiresGPU": "required", "GPUParams": json.dumps(gpuParams)})
         factory = TaskChainWorkloadFactory()
         testWorkload = factory.factoryWorkloadConstruction("PullingTheChain", arguments)
@@ -2413,6 +2423,10 @@ class TaskChainTests(EmulatedUnitTestCase):
         self.assertEqual(arguments['GPUParams'], json.dumps(None))
         self.assertEqual(arguments["Task1"]['GPUParams'], json.dumps(gpuParams))
         self.assertEqual(arguments["Task2"]['GPUParams'], json.dumps(gpuParams))
+
+        self.assertEqual(arguments['JobExtraMatchRequirements'], "")
+        self.assertEqual(arguments["Task1"]['JobExtraMatchRequirements'], extraReqs)
+        self.assertIsNone(arguments["Task2"].get('JobExtraMatchRequirements'))
 
         for taskName in testWorkload.listAllTaskNames():
             taskObj = testWorkload.getTaskByName(taskName)
@@ -2447,6 +2461,10 @@ class TaskChainTests(EmulatedUnitTestCase):
         self.assertEqual(arguments['GPUParams'], json.dumps(None))
         self.assertEqual(arguments["Task1"]['GPUParams'], json.dumps(gpuParams))
         self.assertEqual(arguments["Task2"]['GPUParams'], json.dumps(gpuParams))
+
+        self.assertEqual(arguments['JobExtraMatchRequirements'], "")
+        self.assertEqual(arguments["Task1"]['JobExtraMatchRequirements'], extraReqs)
+        self.assertIsNone(arguments["Task2"].get('JobExtraMatchRequirements'))
 
     def testWQStartPolicy(self):
         """

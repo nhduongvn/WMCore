@@ -5,11 +5,9 @@ Implementation of StageOutImpl interface for gfal-copy
 """
 import argparse
 import os
-
+import logging
 from WMCore.Storage.Registry import registerStageOutImpl
 from WMCore.Storage.StageOutImpl import StageOutImpl
-
-_CheckExitCodeOption = True
 
 
 class GFAL2Impl(StageOutImpl):
@@ -24,10 +22,21 @@ class GFAL2Impl(StageOutImpl):
         # Next commands after separation are executed without env -i and this leads us with
         # mixed environment with COMP and system python.
         # GFAL2 is not build under COMP environment and it had failures with mixed environment.
-        self.setups = "env -i X509_USER_PROXY=$X509_USER_PROXY JOBSTARTDIR=$JOBSTARTDIR bash -c '{}'"
-        self.removeCommand = self.setups.format('. $JOBSTARTDIR/startup_environment.sh; date; gfal-rm -t 600 {}')
+
+        self.setAuthX509 = "X509_USER_PROXY=$X509_USER_PROXY"
+        # if BEARER_TOKEN_FILE is not set, use /dev/null as a fallback to suppress the error
+        self.setAuthToken = "BEARER_TOKEN_FILE=$BEARER_TOKEN_FILE BEARER_TOKEN=$(cat ${BEARER_TOKEN_FILE:-/dev/null})"
+        self.unsetX509 = "unset X509_USER_PROXY;"
+        self.unsetToken = "unset BEARER_TOKEN;"
+
+        # These commands are parameterized according to:
+        # 1. authentication method (set_auth)
+        # 2. forced authentication method (unset_auth)
+        # 3. finally, debug mode or not (dry_run)
+        self.setups = "env -i {{set_auth}} JOBSTARTDIR=$JOBSTARTDIR bash -c '{}'"
         self.copyOpts = '-t 2400 -T 2400 -p -v --abort-on-failure {checksum} {options} {source} {destination}'
-        self.copyCommand = self.setups.format('. $JOBSTARTDIR/startup_environment.sh; date; gfal-copy ' + self.copyOpts)
+        self.copyCommand = self.setups.format('. $JOBSTARTDIR/startup_environment.sh; {unset_auth} date; {dry_run} gfal-copy ' + self.copyOpts)
+        self.removeCommand = self.setups.format('. $JOBSTARTDIR/startup_environment.sh; {unset_auth} date; {dry_run} gfal-rm -t 600 {}')
 
     def createFinalPFN(self, pfn):
         """
@@ -64,32 +73,58 @@ class GFAL2Impl(StageOutImpl):
         """
         return
 
-    def createRemoveFileCommand(self, pfn):
+    def createRemoveFileCommand(self, pfn, authMethod=None, forceMethod=False, dryRun=False):
         """
-        _createRemoveFileCommand_
         handle file remove using gfal-rm
 
         gfal-rm options used:
           -t   global timeout for the execution of the command.
                Command is interrupted if time expires before it finishes
+        :pfn: str, destination PFN
+        :authMethod: string with the authentication method to use (either 'X509' or 'TOKEN')
+        :forceMethod: bool to isolate and force a given authentication method
+        :dryRun: bool, dry run mode (to enable debug mode)
         """
-        if os.path.isfile(pfn):
-            return "/bin/rm -f {}".format(os.path.abspath(pfn))
+        if authMethod and authMethod.upper() == 'TOKEN':
+            if not self.isBearerTokenFileSet():
+                msg = "File removal requested with tokens, but environment variable is not defined."
+                msg += " Forcing it to use X509 authentication method instead."
+                logging.info(msg)
+                authMethod = 'X509'
         else:
-            return self.removeCommand.format(self.createFinalPFN(pfn))
+            authMethod = 'X509'
 
+        if authMethod == 'X509':
+            set_auth = self.setAuthX509
+            unset_auth = self.unsetToken if forceMethod else ""
+        elif authMethod == 'TOKEN':
+            set_auth = self.setAuthToken
+            unset_auth = self.unsetToken if forceMethod else ""
+        
+        dryRun = 'echo ' if dryRun else ''
 
-    def buildCopyCommandDict(self, sourcePFN, targetPFN, options=None, checksums=None):
+        if os.path.isfile(pfn):
+            return "{} /bin/rm -f {}".format(dryRun, os.path.abspath(pfn))
+        else:
+            return self.removeCommand.format(self.createFinalPFN(pfn), set_auth=set_auth, unset_auth=unset_auth, dry_run=dryRun)
+
+    def buildCopyCommandDict(self, sourcePFN, targetPFN, options=None, checksums=None,
+                             authMethod='X509', forceMethod=False, dryRun=False):
         """
-        Build the gfal-cp command for stageOut
+        Build the gfal-copy command for stageOut
 
         :sourcePFN: str, PFN of the source file
         :targetPFN: str, destination PFN
         :options: str, additional options for gfal-cp
         :checksums: dict, collect checksums according to the algorithms saved as keys
+        :authMethod: string with the authentication method to use (either 'X509' or 'TOKEN')
+        :forceMethod: bool to isolate and force a given authentication method
+        :dryRun: bool, dry run mode (to enable debug mode)
+        :returns: a dictionary with specific parameters to be formatted in the commands
         """
 
-        copyCommandDict = {'checksum': '', 'options': '', 'source': '', 'destination': ''}
+        copyCommandDict = {'checksum': '', 'options': '', 'source': '', 'destination': '',
+                           'set_auth': '', 'unset_auth': '', 'dry_run': ''}
 
         useChecksum = (checksums is not None and 'adler32' in checksums and not self.stageIn)
 
@@ -111,9 +146,28 @@ class GFAL2Impl(StageOutImpl):
         copyCommandDict['source'] = self.createFinalPFN(sourcePFN)
         copyCommandDict['destination'] = self.createFinalPFN(targetPFN)
 
+        if authMethod and authMethod.upper() == 'TOKEN' and forceMethod is False:
+            if not self.isBearerTokenFileSet():
+                msg = "Stage out requested with tokens, but environment variable is not defined."
+                msg += " Forcing it to use X509 authentication method instead."
+                logging.info(msg)
+                authMethod = 'X509'
+        else:
+            authMethod = 'X509'
+
+        if authMethod.upper() == 'X509':
+            copyCommandDict['set_auth'] = self.setAuthX509
+            copyCommandDict['unset_auth'] = self.unsetToken if forceMethod else ""
+        elif authMethod.upper() == 'TOKEN':
+            copyCommandDict['set_auth'] = self.setAuthToken
+            copyCommandDict['unset_auth'] = self.unsetToken if forceMethod else ""
+
+        copyCommandDict['dry_run'] = 'echo ' if dryRun else ''
+
         return copyCommandDict
 
-    def createStageOutCommand(self, sourcePFN, targetPFN, options=None, checksums=None):
+    def createStageOutCommand(self, sourcePFN, targetPFN, options=None, checksums=None, 
+                              authMethod=None, forceMethod=False):
         """
         Create gfal-cp command for stageOut
 
@@ -121,27 +175,35 @@ class GFAL2Impl(StageOutImpl):
         :targetPFN: str, destination PFN
         :options: str, additional options for gfal-cp
         :checksums: dict, collect checksums according to the algorithms saved as keys
+        :authMethod: string with the authentication method to use (either 'X509' or 'TOKEN')
+        :forceMethod: bool to isolate and force a given authentication method
+        returns: a string with the full stage out script
         """
-
-        copyCommandDict = self.buildCopyCommandDict(sourcePFN, targetPFN, options, checksums)
+        copyCommandDict = self.buildCopyCommandDict(sourcePFN, targetPFN, options, checksums,
+                                                    authMethod, forceMethod)
         copyCommand = self.copyCommand.format_map(copyCommandDict)
+        if authMethod is None:
+            # add more verbosity for reporting which authentication method GFAL uses when it is not specified
+            copyCommand = copyCommand.replace('-p -v', '-p -vvv')
+        
         result = "#!/bin/bash\n" + copyCommand
 
-        if _CheckExitCodeOption:
-            result += """
-            EXIT_STATUS=$?
-            echo "gfal-copy exit status: $EXIT_STATUS"
-            if [[ $EXIT_STATUS != 0 ]]; then
-                echo "ERROR: gfal-copy exited with $EXIT_STATUS"
-                echo "Cleaning up failed file:"
-                {remove_command}
-            fi
-            exit $EXIT_STATUS
-            """.format(remove_command=self.createRemoveFileCommand(targetPFN))
+        # add check for exit code
+        result += """
+        EXIT_STATUS=$?
+        echo "gfal-copy exit status: $EXIT_STATUS"
+        if [[ $EXIT_STATUS != 0 ]]; then
+            echo "ERROR: gfal-copy exited with $EXIT_STATUS"
+            echo "Cleaning up failed file:"
+            {remove_command}
+        fi
+        exit $EXIT_STATUS
+        """.format(remove_command=self.createRemoveFileCommand(targetPFN, authMethod=authMethod, forceMethod=forceMethod))
 
         return result
 
-    def createDebuggingCommand(self, sourcePFN, targetPFN, options=None, checksums=None):
+    def createDebuggingCommand(self, sourcePFN, targetPFN, options=None, checksums=None,
+                               authMethod=None, forceMethod=False):
         """
         Debug a failed gfal-cp command for stageOut, without re-running it,
         providing information on the environment and the certifications
@@ -152,8 +214,13 @@ class GFAL2Impl(StageOutImpl):
         :checksums: dict, collect checksums according to the algorithms saved as keys
         """
 
-        copyCommandDict = self.buildCopyCommandDict(sourcePFN, targetPFN, options, checksums)
+        copyCommandDict = self.buildCopyCommandDict(sourcePFN, targetPFN, options, checksums,
+                                                    authMethod, forceMethod, dryRun=True)
+
         copyCommand = self.copyCommand.format_map(copyCommandDict)
+        if authMethod is None:
+            # add more verbosity for reporting which authentication method GFAL uses when it is not specified
+            copyCommand = copyCommand.replace('-p -v', '-p -vvv')
 
         result = "#!/bin/bash\n"
         result += """
@@ -182,6 +249,10 @@ class GFAL2Impl(StageOutImpl):
         echo "Source PFN: {source}"
         echo "Target PFN: {destination}"
         echo
+        echo "Information for credentials in the environment"
+        echo "Bearer token content: $BEARER_TOKEN"
+        echo "Bearer token file: $BEARER_TOKEN_FILE"
+        echo
         echo "VOMS proxy info:"
         voms-proxy-info -all
         echo "==========================================================="
@@ -195,10 +266,7 @@ class GFAL2Impl(StageOutImpl):
         _removeFile_
         CleanUp pfn provided
         """
-        if os.path.isfile(pfnToRemove):
-            command = "/bin/rm -f {}".format(os.path.abspath(pfnToRemove))
-        else:
-            command = self.removeCommand.format(self.createFinalPFN(pfnToRemove))
+        command = self.createRemoveFileCommand(pfnToRemove)
         self.executeCommand(command)
 
 

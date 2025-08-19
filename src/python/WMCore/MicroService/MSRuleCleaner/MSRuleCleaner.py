@@ -321,16 +321,27 @@ class MSRuleCleaner(MSCore):
             self.logger.info(msg)
             self._checkStatusAdvanceExpired(wflow, additionalInfo=msg)
         elif wflow['RequestStatus'] == 'announced' and not wflow['TransferTape']:
-            # NOTE: We skip workflows which have not yet finalised their tape transfers.
-            #       (i.e. even if a single output which is supposed to be covered
-            #       by a tape rule is in any of the following transient states:
-            #       {REPLICATING, STUCK, SUSPENDED, WAITING_APPROVAL}.)
-            #       We still need some proper logging for them.
+            # Given that we are still waiting for the tape transfers to be fulfilled,
+            # we can go ahead and start cleaning up the input data.
             msg = "Skipping workflow: %s - tape transfers are not yet completed." % wflow['RequestName']
-            msg += " Will retry again in the next cycle."
+            msg += "Workflow in 'announced' state, hence proceeding only with MSTransferor / input data removal. "  
+            msg += "Will retry the remaining in the next cycle."
             self.logger.info(msg)
             self._checkStatusAdvanceExpired(wflow, additionalInfo=msg)
+            for pline in self.mstrlines:
+                try: 
+                    pline.run(wflow)
+                except Exception as ex:
+                    msg = f"{pline.name}: General error from pipeline"
+                    msg += " when cleaning input MSTransferor rules."
+                    msg += f"\nWorkflow: {wflow['RequestName']}. Error:  \n{str(ex)}."
+                    msg += "\nWill retry again in the next cycle."
+                    self.logger.exception(msg)
+                    continue
+            # return now to avoid exeecuting the archival pipeline
+            return
         elif wflow['RequestStatus'] in ['announced', 'rejected', 'aborted-completed']:
+            # Workflows reaching this block are ready for the full pipeline execution
             for pline in self.cleanuplines:
                 try:
                     pline.run(wflow)
@@ -855,6 +866,8 @@ class MSRuleCleaner(MSCore):
         """
         Cleans all the Rules present in the field 'RulesToClean' in the MSRuleCleaner
         workflow representation. And fills the relevant Cleanup Status.
+        Lifetime of rule will be updated to 0 rather than deleted, following
+        issue: https://github.com/dmwm/CMSRucio/issues/921
         :param wflow:   A MSRuleCleaner workflow representation
         :return:        The workflow object
         """
@@ -866,15 +879,15 @@ class MSRuleCleaner(MSCore):
         delResults = []
         if self.msConfig['enableRealMode']:
             for rule in wflow['RulesToClean'][currPline]:
-                self.logger.info("%s: Deleting ruleId: %s ", currPline, rule)
-                delResult = self.rucio.deleteRule(rule)
+                self.logger.info("%s: Updating lifetime=0 to ruleId: %s ", currPline, rule)
+                delResult = self.rucio.updateRule(rule, {"lifetime": 0})
                 delResults.append(delResult)
                 if not delResult:
-                    self.logger.warning("%s: Failed to delete ruleId: %s ", currPline, rule)
+                    self.logger.warning("%s: Failed to update ruleId: %s ", currPline, rule)
         else:
             for rule in wflow['RulesToClean'][currPline]:
                 delResults.append(True)
-                self.logger.info("%s: DRY-RUN: Is about to delete ruleId: %s ", currPline, rule)
+                self.logger.info("%s: DRY-RUN: Is about to update ruleId: %s ", currPline, rule)
 
         # Set the cleanup flag:
         wflow['CleanupStatus'][currPline] = all(delResults)
