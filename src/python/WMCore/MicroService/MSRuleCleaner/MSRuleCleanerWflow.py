@@ -220,7 +220,8 @@ class MSRuleCleanerWflow(dict):
             ('IncludeParents', False, bool),
             ('InputDataset', None, (bytes, str)),
             ('ParentDataset', None, (bytes, str)),
-            ('StatusAdvanceExpiredMsg', "", str)]
+            ('StatusAdvanceExpiredMsg', "", str),
+            ('WmcOutputRulesMap', {}, dict)]
 
         # NOTE: ParentageResolved is set by default to True it will be False only if:
         #       - RequestType is StepChain

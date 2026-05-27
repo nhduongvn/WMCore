@@ -479,6 +479,29 @@ class Rucio(object):
             raise WMRucioException(msg) from ex
         return ruleIds
 
+    def reduceReplicationRule(self, ruleId, copies, excludeExpression=None):
+        """
+        Reduce the number of copies for an existing replication rule.
+        Optionally specify RSEs to exclude so Rucio drops locks at those RSEs
+        and keeps copies only at remaining RSEs.
+        :param ruleId: string with the rule id
+        :param copies: integer with the desired (lower) number of copies
+        :param excludeExpression: optional RSE expression for RSEs to exclude
+                                  (set subtraction syntax, e.g. "T2_US_MIT|T2_CH_CERN")
+        :return: boolean status
+        """
+        try:
+            self.cli.reduce_replication_rule(ruleId, copies,
+                                             exclude_expression=excludeExpression)
+            return True
+        except RuleNotFound:
+            self.logger.error("reduceReplicationRule: cannot find rule id: %s", ruleId)
+            return False
+        except Exception as ex:
+            self.logger.error("reduceReplicationRule: failed for rule id: %s. Error: %s",
+                              ruleId, str(ex))
+            return False
+
     def createReplicationRule(self, names, rseExpression, scope='cms', copies=1, **kwargs):
         """
         _createReplicationRule_
@@ -737,6 +760,26 @@ class Rucio(object):
         except Exception as ex:
             self.logger.error("Exception deleting rule id: %s. Error: %s", ruleId, str(ex))
             res = False
+        return res
+
+    def listReplicaLocks(self, ruleId):
+        """
+        List all file-level replica locks for a given rule id.
+        Returns one entry per (file, RSE) pair; for copies=N there are N entries
+        per file. Each entry is a dict with at least:
+          'name'  - the file LFN
+          'rse'   - the RSE name
+          'state' - 'OK', 'REPLICATING', or 'STUCK'
+        :param ruleId: string with the rule id
+        :return: a list of lock dictionaries (empty on error)
+        """
+        res = []
+        try:
+            res = list(self.cli.list_replica_locks(ruleId))
+        except RuleNotFound:
+            self.logger.error("listReplicaLocks: rule id %s not found", ruleId)
+        except Exception as ex:
+            self.logger.error("listReplicaLocks: failed for rule id %s. Error: %s", ruleId, str(ex))
         return res
 
     def evaluateRSEExpression(self, rseExpr, useCache=True, returnTape=True):

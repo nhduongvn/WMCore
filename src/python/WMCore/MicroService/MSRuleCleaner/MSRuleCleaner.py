@@ -319,7 +319,7 @@ class MSRuleCleaner(MSCore):
             self.logger.info(msg)
             self._checkStatusAdvanceExpired(wflow, additionalInfo=msg)
             for pline in self.mstrlines:
-                try: 
+                try:
                     pline.run(wflow)
                 except Exception as ex:
                     msg = f"{pline.name}: General error from pipeline"
@@ -328,6 +328,13 @@ class MSRuleCleaner(MSCore):
                     msg += "\nWill retry again in the next cycle."
                     self.logger.exception(msg)
                     continue
+            # Free origin T2 disk for output data whose wma_prod container rule is already OK,
+            # so we don't wait for tape transfers to finish before releasing origin-site replicas.
+            try:
+                self.cleanOutputBlockRules(wflow)
+            except Exception as ex:
+                msg = "cleanOutputBlockRules: error for workflow: %s. Error: %s. Will retry in the next cycle."
+                self.logger.exception(msg, wflow['RequestName'], str(ex))
             # return now to avoid exeecuting the archival pipeline
             return
         elif wflow['RequestStatus'] in ['announced', 'rejected', 'aborted-completed']:
@@ -642,6 +649,17 @@ class MSRuleCleaner(MSCore):
             # Set Transfer status - information fetched from MSOutput only
             wflow['TransferDone'] = True
 
+            # Collect all wmcore_output rule IDs (disk + tape) per dataset.
+            # A file must be OK in ALL of these rules to be eligible for block rule cleanup.
+            for mapRecord in transferInfo['OutputMap']:
+                ruleIds = []
+                if mapRecord.get('DiskRuleID'):
+                    ruleIds.append(mapRecord['DiskRuleID'])
+                if mapRecord.get('TapeRuleID'):
+                    ruleIds.append(mapRecord['TapeRuleID'])
+                if ruleIds:
+                    wflow['WmcOutputRulesMap'][mapRecord['Dataset']] = ruleIds
+
             # Set Tape rules status - information fetched from Rucio (tape rule ids from MSOutput)
             # For setting 'TransferTape' = True we require either no tape rules for the
             # workflow have been created or all existing tape rules to be in status 'OK',
@@ -776,6 +794,93 @@ class MSRuleCleaner(MSCore):
 
         # Set the cleanup flag:
         wflow['CleanupStatus'][currPline] = all(delResults)
+        return wflow
+
+    def _getOkFilesFromRule(self, ruleId):
+        """
+        Return the set of file LFNs where ALL replica locks are in state OK
+        for the given rule id (no REPLICATING or STUCK copies remain).
+        :param ruleId: string with the Rucio rule id
+        :return: set of file LFN strings
+        """
+        from collections import defaultdict
+        lockStates = defaultdict(lambda: {'OK': set(), 'REPLICATING': set(), 'STUCK': set()})
+        for lock in self.rucio.listReplicaLocks(ruleId):
+            lockState = lock['state'] if lock['state'] in ('OK', 'REPLICATING', 'STUCK') else 'REPLICATING'
+            lockStates[lock['name']][lockState].add(lock['rse'])
+        okFiles = set()
+        for fname, states in lockStates.items():
+            if states['OK'] and not states['REPLICATING'] and not states['STUCK']:
+                okFiles.add(fname)
+        return okFiles
+
+    def cleanOutputBlockRules(self, wflow):
+        """
+        During the tape transfer phase (TransferDone=True, TransferTape=False), free origin T2
+        disk space block by block. A wma_prod block rule is expired (lifetime=0) as soon as
+        ALL files in that block have OK locks in ALL wmcore_output rules (DiskRuleID and
+        TapeRuleID when present) — intersection across all wmcore_output rules.
+
+        With wma_prod container rules disabled and block rules carrying copies=2, expiring a
+        block rule releases both copies (origin T2 and second site) once the data is safely
+        placed by MSOutput.
+
+        :param wflow: A MSRuleCleaner workflow representation
+        :return: the workflow object
+        """
+        wmaAcct = self.msConfig['rucioWmaAccount']
+
+        for container in wflow['OutputDatasets']:
+            # --- Get all wmcore_output rule IDs for this container (disk + tape) ---
+            wmcRuleIds = wflow['WmcOutputRulesMap'].get(container)
+            if not wmcRuleIds:
+                self.logger.info("cleanOutputBlockRules: no wmcore_output rules for %s, skipping", container)
+                continue
+
+            # --- A file is safe only if OK in ALL wmcore_output rules ---
+            commonOkFiles = None
+            for ruleId in wmcRuleIds:
+                okFilesForRule = self._getOkFilesFromRule(ruleId)
+                self.logger.info("cleanOutputBlockRules: %s — OK in wmcore_output rule %s: %d",
+                                 container, ruleId, len(okFilesForRule))
+                if commonOkFiles is None:
+                    commonOkFiles = okFilesForRule
+                else:
+                    commonOkFiles &= okFilesForRule
+
+            if not commonOkFiles:
+                self.logger.info("cleanOutputBlockRules: no common OK files yet for %s, skipping", container)
+                continue
+
+            self.logger.info("cleanOutputBlockRules: %s — common OK files across all wmcore_output rules: %d",
+                             container, len(commonOkFiles))
+
+            # --- Check each block: expire wma_prod block rule if all files are in common OK set ---
+            try:
+                blocks = self.rucio.getBlocksInContainer(container)
+            except WMRucioDIDNotFoundException:
+                self.logger.info("cleanOutputBlockRules: container %s not found in Rucio, skipping", container)
+                continue
+
+            for block in blocks:
+                blockFiles = {f['name'] for f in self.rucio.listContent(block)}
+                if not blockFiles:
+                    continue
+                if not blockFiles.issubset(commonOkFiles):
+                    self.logger.info("cleanOutputBlockRules: block %s not fully OK (%d/%d files), skipping",
+                                     block, len(blockFiles & commonOkFiles), len(blockFiles))
+                    continue
+
+                # All files in block are OK in all wmcore_output rules — expire wma_prod block rule
+                for blockRule in self.rucio.listDataRules(block, account=wmaAcct):
+                    if self.msConfig['enableRealMode']:
+                        self.logger.info("cleanOutputBlockRules: setting lifetime=0 on block rule %s for %s",
+                                         blockRule['id'], block)
+                        self.rucio.updateRule(blockRule['id'], {"lifetime": 0})
+                    else:
+                        self.logger.info("cleanOutputBlockRules: DRY-RUN: would set lifetime=0 on block rule %s for %s",
+                                         blockRule['id'], block)
+
         return wflow
 
     def getRequestRecords(self, reqStatus):
